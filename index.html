@@ -34,8 +34,8 @@
       width: min(92vw, 1120px);
       height: min(88vh, 720px);
       display: grid;
-      grid-template-rows: auto 1fr auto;
-      gap: 22px;
+      grid-template-rows: auto 1fr auto auto;
+      gap: 18px;
       padding: 34px;
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 28px;
@@ -159,6 +159,14 @@
       line-height: 1.2;
     }
 
+    #debug {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+      text-align: center;
+      min-height: 16px;
+    }
+
     .empty {
       text-align: center;
       color: var(--muted);
@@ -181,16 +189,19 @@
 <body>
   <section class="screen" id="app">
     <header>
-      <div>Flight Display v0.4</div>
+      <div>Flight Display v0.5-proxy</div>
       <div id="clock">--:--</div>
     </header>
 
     <main class="main" id="main"></main>
     <footer id="footer"></footer>
-    <div id="debug" style="color:#9eb3c9;font-size:12px;line-height:1.3;text-align:center;margin-top:-12px;"></div>
+    <div id="debug">Debug: odottaa hakua</div>
   </section>
 
   <script>
+    // Liitä tähän Google Apps Scriptin Web app URL, kun olet julkaissut sen.
+    const LIVE_PROXY_URL = "PASTE_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
+
     const flights = [
       {
         flightNumber: "AY131",
@@ -218,13 +229,7 @@
     let lastLiveFetch = 0;
     let lastFlightKey = "";
 
-    function pad(number) {
-      return String(number).padStart(2, "0");
-    }
-
-    function normalizeCallsign(value) {
-      return String(value || "").trim().toUpperCase();
-    }
+    function pad(number) { return String(number).padStart(2, "0"); }
 
     function formatDuration(ms) {
       const totalMinutes = Math.max(0, Math.floor(ms / 60000));
@@ -264,18 +269,20 @@
 
     function getRelevantFlight(now) {
       const sorted = flights
-        .map(f => ({
-          ...f,
-          departureDate: new Date(f.departure),
-          arrivalDate: new Date(f.arrival)
-        }))
+        .map(f => ({ ...f, departureDate: new Date(f.departure), arrivalDate: new Date(f.arrival) }))
         .sort((a, b) => a.departureDate - b.departureDate);
-
       return sorted.find(f => f.arrivalDate > now) || null;
     }
 
-    async function fetchOpenSkyLiveData(flight) {
+    async function fetchLiveData(flight) {
       if (!flight || !flight.openskyCallsign) return;
+
+      if (LIVE_PROXY_URL.includes("PASTE_GOOGLE")) {
+        liveData = null;
+        liveStatus = "Proxy URL puuttuu";
+        debugStatus = "Lisää Google Apps Script Web app URL koodiin";
+        return;
+      }
 
       const flightKey = flight.openskyCallsign;
       const now = Date.now();
@@ -283,6 +290,7 @@
       if (lastFlightKey !== flightKey) {
         liveData = null;
         liveStatus = "Haetaan live-dataa";
+        debugStatus = "Debug: uusi lento";
         lastLiveFetch = 0;
         lastFlightKey = flightKey;
       }
@@ -291,42 +299,20 @@
       lastLiveFetch = now;
 
       try {
-        liveStatus = "Haetaan live-dataa";
-        const response = await fetch("https://opensky-network.org/api/states/all");
-        debugStatus = `OpenSky HTTP ${response.status}`;
+        const url = `${LIVE_PROXY_URL}?callsign=${encodeURIComponent(flight.openskyCallsign)}`;
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
+        const result = await response.json();
 
-        if (!response.ok) {
-          throw new Error(`OpenSky ${response.status}`);
-        }
+        debugStatus = result.debug || "Proxy vastasi";
 
-        const data = await response.json();
-        const wanted = normalizeCallsign(flight.openskyCallsign);
-        const states = data.states || [];
-        const finExamples = states
-          .map(row => normalizeCallsign(row[1]))
-          .filter(cs => cs.startsWith("FIN"))
-          .slice(0, 8);
-        const state = states.find(row => normalizeCallsign(row[1]) === wanted);
-        debugStatus = `Haetaan ${wanted} · OpenSky states: ${states.length} · FIN-esim: ${finExamples.join(", ") || "ei FIN-osumia"}`;
-
-        if (!state) {
+        if (!result.found) {
           liveData = null;
           liveStatus = "Ei live-osumaa";
           return;
         }
 
-        liveData = {
-          icao24: state[0],
-          callsign: normalizeCallsign(state[1]),
-          longitude: state[5],
-          latitude: state[6],
-          altitudeMeters: state[7],
-          onGround: state[8],
-          velocityMs: state[9],
-          heading: state[10],
-          verticalRateMs: state[11],
-          lastContact: state[4] ? new Date(state[4] * 1000) : null
-        };
+        liveData = result;
         liveStatus = "Live";
       } catch (error) {
         liveData = null;
@@ -343,14 +329,16 @@
       const flight = getRelevantFlight(now);
       const main = document.getElementById("main");
       const footer = document.getElementById("footer");
+      const debug = document.getElementById("debug");
 
       if (!flight) {
         main.innerHTML = `<div class="empty">Ei tulevia lentoja</div>`;
         footer.innerHTML = "";
+        debug.textContent = "Debug: ei tulevaa lentoa";
         return;
       }
 
-      fetchOpenSkyLiveData(flight);
+      fetchLiveData(flight);
 
       const dep = flight.departureDate;
       const arr = flight.arrivalDate;
@@ -377,26 +365,28 @@
       const altitudeFt = liveData ? metersToFeet(liveData.altitudeMeters) : null;
       const speedKmh = liveData ? msToKmh(liveData.velocityMs) : null;
       const heading = liveData && liveData.heading !== null ? Math.round(liveData.heading) : null;
-      const liveAge = liveData && liveData.lastContact ? Math.max(0, Math.round((now - liveData.lastContact) / 1000)) : null;
+      const liveAge = liveData && liveData.lastContact ? Math.max(0, Math.round((now - new Date(liveData.lastContact)) / 1000)) : null;
       const liveStatusText = liveData ? `${liveStatus}${liveAge !== null ? ` · ${liveAge}s sitten` : ""}` : liveStatus;
 
       main.innerHTML = `
         <div class="flight-number">${flight.flightNumber}</div>
-        <div class="route">
-          <span>${flight.from}</span>
-          <span class="arrow">→</span>
-          <span>${flight.to}</span>
-        </div>
+        <div class="route"><span>${flight.from}</span><span class="arrow">→</span><span>${flight.to}</span></div>
         <div class="status">${status}</div>
         <div class="countdown-label">${label}</div>
         <div class="countdown">${timeText}</div>
         <div class="progress-wrap"><div class="progress" style="width:${progress}%"></div></div>
       `;
 
-      footer.innerHTML = `$1
+      footer.innerHTML = `
+        <div class="info-box"><div class="info-label">Lähtö</div><div class="info-value">${formatTime(dep, "Europe/Helsinki")}</div></div>
+        <div class="info-box"><div class="info-label">Saapuminen</div><div class="info-value">${formatTime(arr, flight.arrivalTimeZone || "Europe/Helsinki")}</div></div>
+        <div class="info-box"><div class="info-label">Korkeus</div><div class="info-value">${formatLiveValue(altitudeFt, " ft")}</div><div class="live-note">${liveStatusText}</div></div>
+        <div class="info-box"><div class="info-label">Nopeus</div><div class="info-value">${formatLiveValue(speedKmh, " km/h")}</div></div>
+        <div class="info-box"><div class="info-label">Suunta</div><div class="info-value">${formatLiveValue(heading, "°")}</div></div>
+        <div class="info-box"><div class="info-label">Sijainti</div><div class="info-value">${liveData ? `${formatCoordinate(liveData.latitude, "lat")} ${formatCoordinate(liveData.longitude, "lon")}` : "--"}</div><div class="live-note">${flight.openskyCallsign}</div></div>
       `;
 
-      document.getElementById("debug").textContent = debugStatus;
+      debug.textContent = debugStatus;
     }
 
     render();
