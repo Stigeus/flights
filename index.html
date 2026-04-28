@@ -178,7 +178,7 @@ header {
 <body>
 <div class="screen">
   <header>
-    <div>Flight Display v0.8-live-time</div>
+    <div>Flight Display v0.9-timezones</div>
     <div id="clock">--:--</div>
   </header>
 
@@ -193,11 +193,11 @@ header {
 
   <div class="grid">
     <div class="box"><div class="label">Lähtö</div><div class="value" id="depTime">--</div></div>
-    <div class="box"><div class="label">Saapuminen</div><div class="value" id="arrTime">--</div></div>
+    <div class="box"><div class="label">Saapuminen</div><div class="value" id="arrTime">--</div><div class="note" id="arrTimeHel">--</div></div>
     <div class="box"><div class="label">Korkeus</div><div class="value" id="alt">--</div><div class="note" id="liveAge">--</div></div>
     <div class="box"><div class="label">Nopeus</div><div class="value" id="spd">--</div></div>
     <div class="box"><div class="label">Suunta</div><div class="value" id="hdg">--</div></div>
-    <div class="box"><div class="label">Sijainti</div><div class="value" id="pos">--</div><div class="note" id="callsignNote">--</div></div>
+    <div class="box"><div class="label">Sijainnin aika</div><div class="value" id="localTime">--</div><div class="note" id="pos">--</div></div>
   </div>
 
   <div class="debug" id="debug">Debug: odottaa hakua</div>
@@ -264,6 +264,21 @@ function formatCoordinate(value, type) {
   return `${Math.abs(value).toFixed(2)}°${suffix}`;
 }
 
+function estimateLocalTimeFromLongitude(longitude) {
+  if (longitude === null || longitude === undefined || Number.isNaN(longitude)) return "--";
+
+  // Arvio: aikavyöhyke noin 15 pituusastetta / tunti.
+  // Tämä ei huomioi valtioiden virallisia aikavyöhykerajoja tai kesäaikaa,
+  // mutta antaa lennolla hyvän "missä ajassa mennään" -arvion.
+  const offsetHours = Math.round(longitude / 15);
+  const nowUtc = new Date();
+  const estimated = new Date(nowUtc.getTime() + offsetHours * 60 * 60 * 1000);
+  const hh = pad(estimated.getUTCHours());
+  const mm = pad(estimated.getUTCMinutes());
+  const sign = offsetHours >= 0 ? "+" : "-";
+  return `${hh}:${mm} UTC${sign}${Math.abs(offsetHours)}`;
+}
+
 function updateClock() {
   document.getElementById("clock").innerText = formatTime(new Date(), "Europe/Helsinki");
 }
@@ -277,8 +292,8 @@ function updateStaticFlightInfo() {
   document.getElementById("to").innerText = FLIGHT.to;
   document.getElementById("depTime").innerText = formatTime(dep, FLIGHT.departureTimeZone);
   document.getElementById("arrTime").innerText = formatTime(arr, FLIGHT.arrivalTimeZone);
-  document.getElementById("callsignNote").innerText = FLIGHT.callsign;
-}
+  document.getElementById("arrTimeHel").innerText = `HEL ${formatTime(arr, "Europe/Helsinki")}`;
+  }
 
 function updateFlightTime() {
   const now = new Date();
@@ -321,8 +336,10 @@ function updateLiveFields() {
 
   if (liveData && liveData.latitude !== null && liveData.longitude !== null) {
     document.getElementById("pos").innerText = `${formatCoordinate(liveData.latitude,"lat")} ${formatCoordinate(liveData.longitude,"lon")}`;
+    document.getElementById("localTime").innerText = estimateLocalTimeFromLongitude(liveData.longitude);
   } else {
-    document.getElementById("pos").innerText = "--";
+    document.getElementById("pos").innerText = FLIGHT.callsign;
+    document.getElementById("localTime").innerText = "--";
   }
 
   if (liveData && liveData.lastContact) {
