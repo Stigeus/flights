@@ -178,7 +178,7 @@ header {
 <body>
 <div class="screen">
   <header>
-    <div>Flight Display v0.9-timezones</div>
+    <div>Flight Display v1.2-smart-fetch</div>
     <div id="clock">--:--</div>
   </header>
 
@@ -209,6 +209,7 @@ const PROXY = "https://script.google.com/macros/s/AKfycbw6IsyzgvOZtdpqCO5aDQUnH6
 // Testilento. Muuta nämä seuraavaa testiä varten.
 const FLIGHT = {
   flightNumber: "AY957",
+  flightIata: "AY957",
   callsign: "FIN957",
   from: "HEL",
   to: "ARN",
@@ -285,7 +286,7 @@ function updateClock() {
 
 function updateStaticFlightInfo() {
   const dep = new Date(FLIGHT.departure);
-  const arr = new Date(FLIGHT.arrival);
+  const arr = getBestArrivalDate();
 
   document.getElementById("flightNumber").innerText = FLIGHT.flightNumber;
   document.getElementById("from").innerText = FLIGHT.from;
@@ -294,6 +295,16 @@ function updateStaticFlightInfo() {
   document.getElementById("arrTime").innerText = formatTime(arr, FLIGHT.arrivalTimeZone);
   document.getElementById("arrTimeHel").innerText = `HEL ${formatTime(arr, "Europe/Helsinki")}`;
   }
+
+function getBestArrivalDate() {
+  if (liveData && liveData.arrivalBest) return new Date(liveData.arrivalBest);
+  return new Date(FLIGHT.arrival);
+}
+
+function getBestStatus() {
+  if (liveData && liveData.flightStatus) return String(liveData.flightStatus).toUpperCase();
+  return null;
+}
 
 function updateFlightTime() {
   const now = new Date();
@@ -308,7 +319,7 @@ function updateFlightTime() {
   let progress = 0;
 
   if (now >= dep && now < arr) {
-    status = liveData && liveData.onGround ? "ON GROUND" : "AIRBORNE";
+    status = getBestStatus() || (liveData && liveData.onGround ? "ON GROUND" : "AIRBORNE");
     label = "Lentoa jäljellä";
     timeText = formatDuration(arr - now);
     progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
@@ -350,13 +361,32 @@ function updateLiveFields() {
   }
 }
 
+function shouldFetchLiveData() {
+  const now = new Date();
+  const dep = new Date(FLIGHT.departure);
+  const arr = getBestArrivalDate();
+  const startFetch = new Date(dep.getTime() - 60 * 60 * 1000);
+
+  // Haetaan live/ETA-dataa vain 60 min ennen lähtöä, lennon aikana ja vähän saapumisen jälkeen.
+  const stopFetch = new Date(arr.getTime() + 15 * 60 * 1000);
+  return now >= startFetch && now <= stopFetch;
+}
+
 async function fetchLiveData() {
+  if (!shouldFetchLiveData()) {
+    liveData = null;
+    liveStatus = "Odottaa lentoikkunaa";
+    document.getElementById("debug").innerText = "API-haku alkaa 60 min ennen lähtöä";
+    updateLiveFields();
+    return;
+  }
+
   const now = Date.now();
   if (now - lastFetch < LIVE_FETCH_INTERVAL_MS) return;
   lastFetch = now;
 
   try {
-    const url = `${PROXY}?callsign=${encodeURIComponent(FLIGHT.callsign)}`;
+    const url = `${PROXY}?callsign=${encodeURIComponent(FLIGHT.callsign)}&flight_iata=${encodeURIComponent(FLIGHT.flightIata)}`;
     const response = await fetch(url, { cache:"no-store" });
     if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
 
