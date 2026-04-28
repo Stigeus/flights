@@ -8,162 +8,372 @@
 <style>
 :root {
   --bg:#06111f;
+  --panel:#0b1f36;
   --text:#ffffff;
   --muted:#9eb3c9;
   --accent:#00a3e0;
 }
 
+* { box-sizing:border-box; }
+
 body {
   margin:0;
   width:100vw;
   height:100vh;
-  background:linear-gradient(145deg,#030811,var(--bg));
+  overflow:hidden;
+  background:
+    radial-gradient(circle at top left, rgba(0,163,224,0.18), transparent 34%),
+    linear-gradient(145deg,#030811,var(--bg));
   color:var(--text);
-  font-family:Arial;
+  font-family:Arial, Helvetica, sans-serif;
   display:flex;
   align-items:center;
   justify-content:center;
 }
 
 .screen {
-  width:90vw;
-  max-width:1100px;
-  height:85vh;
-  padding:30px;
-  border-radius:25px;
-  background:#06111f;
-  display:flex;
-  flex-direction:column;
-  gap:20px;
+  width:min(92vw,1120px);
+  height:min(88vh,720px);
+  padding:34px;
+  border-radius:28px;
+  background:rgba(6,17,31,0.78);
+  border:1px solid rgba(255,255,255,0.12);
+  box-shadow:0 24px 80px rgba(0,0,0,0.45);
+  display:grid;
+  grid-template-rows:auto 1fr auto auto;
+  gap:18px;
 }
 
 header {
   display:flex;
   justify-content:space-between;
   color:var(--muted);
+  font-size:clamp(14px,2vw,22px);
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+}
+
+.main {
+  display:grid;
+  align-content:center;
+  justify-items:center;
+  text-align:center;
+  gap:14px;
 }
 
 .flight {
-  font-size:120px;
-  font-weight:bold;
-  text-align:center;
+  font-size:clamp(58px,13vw,150px);
+  font-weight:800;
+  letter-spacing:-0.06em;
+  line-height:0.9;
 }
 
 .route {
-  font-size:60px;
-  text-align:center;
+  font-size:clamp(34px,8vw,96px);
+  font-weight:700;
+  letter-spacing:0.03em;
 }
 
+.arrow { color:var(--accent); font-weight:300; }
+
 .status {
-  text-align:center;
+  margin-top:4px;
+  padding:10px 22px;
+  border-radius:999px;
+  background:rgba(0,163,224,0.14);
   color:var(--accent);
-  font-size:30px;
+  font-size:clamp(16px,3vw,28px);
+  font-weight:700;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+}
+
+.time-label {
+  margin-top:14px;
+  color:var(--muted);
+  font-size:clamp(16px,3vw,26px);
+  text-transform:uppercase;
+  letter-spacing:0.12em;
 }
 
 .time {
-  text-align:center;
-  font-size:80px;
+  font-size:clamp(48px,11vw,132px);
+  font-weight:800;
+  letter-spacing:-0.05em;
+  line-height:0.95;
+}
+
+.progress-wrap {
+  width:min(620px,80vw);
+  height:10px;
+  background:rgba(255,255,255,0.13);
+  border-radius:999px;
+  overflow:hidden;
+  margin-top:4px;
+}
+
+.progress {
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,var(--accent),#ffffff);
+  border-radius:999px;
+  transition:width 0.4s ease;
 }
 
 .grid {
   display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:10px;
+  grid-template-columns:repeat(6,1fr);
+  gap:12px;
 }
 
 .box {
-  background:#0b1f36;
-  padding:10px;
-  border-radius:10px;
+  background:rgba(255,255,255,0.07);
+  padding:14px;
+  border-radius:18px;
+  min-height:88px;
+}
+
+.label {
+  color:var(--muted);
+  font-size:clamp(11px,1.8vw,16px);
+  text-transform:uppercase;
+  letter-spacing:0.12em;
+  margin-bottom:8px;
+  white-space:nowrap;
+}
+
+.value {
+  font-size:clamp(15px,2.2vw,26px);
+  font-weight:700;
+  line-height:1.05;
+}
+
+.note {
+  color:var(--muted);
+  font-size:clamp(10px,1.5vw,13px);
+  margin-top:7px;
+  line-height:1.2;
 }
 
 .debug {
   font-size:12px;
   color:var(--muted);
   text-align:center;
+  min-height:16px;
+}
+
+@media (max-width:700px) {
+  .screen {
+    width:100vw;
+    height:100vh;
+    border:0;
+    border-radius:0;
+    padding:22px;
+  }
+  .grid { grid-template-columns:repeat(2,1fr); }
 }
 </style>
 </head>
 
 <body>
-
 <div class="screen">
+  <header>
+    <div>Flight Display v0.8-live-time</div>
+    <div id="clock">--:--</div>
+  </header>
 
-<header>
-<div>Flight Display v0.7-live</div>
-<div id="clock"></div>
-</header>
+  <main class="main">
+    <div class="flight" id="flightNumber">--</div>
+    <div class="route"><span id="from">--</span> <span class="arrow">→</span> <span id="to">--</span></div>
+    <div class="status" id="status">LOADING</div>
+    <div class="time-label" id="timeLabel">Lentoa jäljellä</div>
+    <div class="time" id="timeLeft">--</div>
+    <div class="progress-wrap"><div class="progress" id="progress"></div></div>
+  </main>
 
-<div class="flight">AY957</div>
-<div class="route">HEL → ARN</div>
-<div class="status" id="status">LOADING</div>
-<div class="time" id="time">--</div>
+  <div class="grid">
+    <div class="box"><div class="label">Lähtö</div><div class="value" id="depTime">--</div></div>
+    <div class="box"><div class="label">Saapuminen</div><div class="value" id="arrTime">--</div></div>
+    <div class="box"><div class="label">Korkeus</div><div class="value" id="alt">--</div><div class="note" id="liveAge">--</div></div>
+    <div class="box"><div class="label">Nopeus</div><div class="value" id="spd">--</div></div>
+    <div class="box"><div class="label">Suunta</div><div class="value" id="hdg">--</div></div>
+    <div class="box"><div class="label">Sijainti</div><div class="value" id="pos">--</div><div class="note" id="callsignNote">--</div></div>
+  </div>
 
-<div class="grid">
-<div class="box">Korkeus<br><span id="alt">--</span></div>
-<div class="box">Nopeus<br><span id="spd">--</span></div>
-<div class="box">Suunta<br><span id="hdg">--</span></div>
-<div class="box">Sijainti<br><span id="pos">--</span></div>
-</div>
-
-<div class="debug" id="debug"></div>
-
+  <div class="debug" id="debug">Debug: odottaa hakua</div>
 </div>
 
 <script>
-
 const PROXY = "https://script.google.com/macros/s/AKfycbw6IsyzgvOZtdpqCO5aDQUnH6UlSm2Q8LJTNqz-k4M90-YQGP_YdB7LdK6Wt0RmQZ6x_A/exec";
-const CALLSIGN = "FIN957";
 
-function updateClock(){
-  document.getElementById("clock").innerText =
-    new Date().toLocaleTimeString("fi-FI",{hour:'2-digit',minute:'2-digit'});
+// Testilento. Muuta nämä seuraavaa testiä varten.
+const FLIGHT = {
+  flightNumber: "AY957",
+  callsign: "FIN957",
+  from: "HEL",
+  to: "ARN",
+  // Ajat ovat käsin syötettyjä testiaikoja. Live-data ei vielä korjaa ETA:a.
+  departure: "2026-04-28T12:20:00+03:00",
+  arrival: "2026-04-28T12:20:00+02:00",
+  departureTimeZone: "Europe/Helsinki",
+  arrivalTimeZone: "Europe/Stockholm"
+};
+
+let liveData = null;
+let liveStatus = "Haetaan live-dataa";
+let lastFetch = 0;
+const LIVE_FETCH_INTERVAL_MS = 60000;
+
+function pad(n) {
+  return String(n).padStart(2,"0");
 }
 
-function format(val,suffix){
-  if(val===null||val===undefined) return "--";
-  return val+suffix;
+function formatDuration(ms) {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${pad(minutes)}m`;
 }
 
-async function fetchData(){
+function formatTime(date, timeZone) {
+  return new Intl.DateTimeFormat("fi-FI", {
+    hour:"2-digit",
+    minute:"2-digit",
+    timeZone
+  }).format(date);
+}
 
-  try{
-    const res = await fetch(PROXY + "?callsign=" + CALLSIGN);
-    const data = await res.json();
+function formatValue(value, suffix="") {
+  if (value === null || value === undefined || Number.isNaN(value)) return "--";
+  return `${value}${suffix}`;
+}
 
-    document.getElementById("debug").innerText = data.debug;
+function metersToFeet(meters) {
+  if (meters === null || meters === undefined) return null;
+  return Math.round(meters * 3.28084 / 100) * 100;
+}
 
-    if(!data.found){
-      document.getElementById("status").innerText = "NO DATA";
-      return;
-    }
+function msToKmh(ms) {
+  if (ms === null || ms === undefined) return null;
+  return Math.round(ms * 3.6);
+}
 
-    document.getElementById("status").innerText = "AIRBORNE";
+function formatCoordinate(value, type) {
+  if (value === null || value === undefined) return "--";
+  const suffix = type === "lat" ? (value >= 0 ? "N" : "S") : (value >= 0 ? "E" : "W");
+  return `${Math.abs(value).toFixed(2)}°${suffix}`;
+}
 
-    const ft = Math.round(data.altitudeMeters * 3.28084);
-    const kmh = Math.round(data.velocityMs * 3.6);
+function updateClock() {
+  document.getElementById("clock").innerText = formatTime(new Date(), "Europe/Helsinki");
+}
 
-    document.getElementById("alt").innerText = format(ft," ft");
-    document.getElementById("spd").innerText = format(kmh," km/h");
-    document.getElementById("hdg").innerText = format(Math.round(data.heading),"°");
+function updateStaticFlightInfo() {
+  const dep = new Date(FLIGHT.departure);
+  const arr = new Date(FLIGHT.arrival);
 
-    const lat = data.latitude?.toFixed(2);
-    const lon = data.longitude?.toFixed(2);
+  document.getElementById("flightNumber").innerText = FLIGHT.flightNumber;
+  document.getElementById("from").innerText = FLIGHT.from;
+  document.getElementById("to").innerText = FLIGHT.to;
+  document.getElementById("depTime").innerText = formatTime(dep, FLIGHT.departureTimeZone);
+  document.getElementById("arrTime").innerText = formatTime(arr, FLIGHT.arrivalTimeZone);
+  document.getElementById("callsignNote").innerText = FLIGHT.callsign;
+}
 
-    document.getElementById("pos").innerText = lat+" / "+lon;
+function updateFlightTime() {
+  const now = new Date();
+  const dep = new Date(FLIGHT.departure);
+  const arr = new Date(FLIGHT.arrival);
+  const total = arr - dep;
+  const elapsed = now - dep;
 
-  }catch(e){
-    document.getElementById("debug").innerText = "Virhe: "+e.message;
+  let status = "NEXT FLIGHT";
+  let label = "Lähtöön";
+  let timeText = formatDuration(dep - now);
+  let progress = 0;
+
+  if (now >= dep && now < arr) {
+    status = liveData && liveData.onGround ? "ON GROUND" : "AIRBORNE";
+    label = "Lentoa jäljellä";
+    timeText = formatDuration(arr - now);
+    progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
+  } else if (now >= arr) {
+    status = "LANDED";
+    label = "Saapunut";
+    timeText = "00h 00m";
+    progress = 100;
+  }
+
+  document.getElementById("status").innerText = status;
+  document.getElementById("timeLabel").innerText = label;
+  document.getElementById("timeLeft").innerText = timeText;
+  document.getElementById("progress").style.width = `${progress}%`;
+}
+
+function updateLiveFields() {
+  const altitudeFt = liveData ? metersToFeet(liveData.altitudeMeters) : null;
+  const speedKmh = liveData ? msToKmh(liveData.velocityMs) : null;
+  const heading = liveData && liveData.heading !== null ? Math.round(liveData.heading) : null;
+
+  document.getElementById("alt").innerText = formatValue(altitudeFt, " ft");
+  document.getElementById("spd").innerText = formatValue(speedKmh, " km/h");
+  document.getElementById("hdg").innerText = formatValue(heading, "°");
+
+  if (liveData && liveData.latitude !== null && liveData.longitude !== null) {
+    document.getElementById("pos").innerText = `${formatCoordinate(liveData.latitude,"lat")} ${formatCoordinate(liveData.longitude,"lon")}`;
+  } else {
+    document.getElementById("pos").innerText = "--";
+  }
+
+  if (liveData && liveData.lastContact) {
+    const ageSeconds = Math.max(0, Math.round((new Date() - new Date(liveData.lastContact)) / 1000));
+    document.getElementById("liveAge").innerText = `${liveStatus} · ${ageSeconds}s sitten`;
+  } else {
+    document.getElementById("liveAge").innerText = liveStatus;
   }
 }
 
-setInterval(updateClock,1000);
-setInterval(fetchData,10000);
+async function fetchLiveData() {
+  const now = Date.now();
+  if (now - lastFetch < LIVE_FETCH_INTERVAL_MS) return;
+  lastFetch = now;
 
-fetchData();
-updateClock();
+  try {
+    const url = `${PROXY}?callsign=${encodeURIComponent(FLIGHT.callsign)}`;
+    const response = await fetch(url, { cache:"no-store" });
+    if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
 
+    const data = await response.json();
+    document.getElementById("debug").innerText = data.debug || "Proxy vastasi";
+
+    if (!data.found) {
+      liveData = null;
+      liveStatus = "Ei live-osumaa";
+      updateLiveFields();
+      return;
+    }
+
+    liveData = data;
+    liveStatus = "Live";
+    updateLiveFields();
+  } catch (error) {
+    liveData = null;
+    liveStatus = "Live-data ei saatavilla";
+    document.getElementById("debug").innerText = `Virhe: ${error.message}`;
+    updateLiveFields();
+  }
+}
+
+function render() {
+  updateClock();
+  updateStaticFlightInfo();
+  updateFlightTime();
+  updateLiveFields();
+  fetchLiveData();
+}
+
+render();
+setInterval(render, 5000);
 </script>
-
 </body>
 </html>
