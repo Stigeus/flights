@@ -181,7 +181,7 @@
 <body>
   <section class="screen" id="app">
     <header>
-      <div>Flight Display v0.2</div>
+      <div>Flight Display v0.3</div>
       <div id="clock">--:--</div>
     </header>
 
@@ -192,13 +192,13 @@
   <script>
     const flights = [
       {
-        flightNumber: "AY142",
-        openskyCallsign: "FIN142",
-        from: "BKK",
-        to: "HEL",
-        departure: "2026-04-28T06:58:00+07:00",
-        arrival: "2026-04-28T15:17:00+03:00",
-        arrivalTimeZone: "Europe/Helsinki"
+        flightNumber: "AY131",
+        openskyCallsign: "FIN131",
+        from: "HEL",
+        to: "SIN",
+        departure: "2026-04-28T00:30:00+03:00",
+        arrival: "2026-04-28T18:30:00+08:00",
+        arrivalTimeZone: "Asia/Singapore"
       },
       {
         flightNumber: "AY1361",
@@ -408,6 +408,7 @@
         <div class="info-box">
           <div class="info-label">Sijainti</div>
           <div class="info-value">${liveData ? `${formatCoordinate(liveData.latitude, "lat")} ${formatCoordinate(liveData.longitude, "lon")}` : "--"}</div>
+          <div class="live-note">${flight.openskyCallsign}</div>
         </div>
       `;
     }
