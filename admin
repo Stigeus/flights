@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Flight Admin</title>
+<style>
+body{margin:0;background:#06111f;color:white;font-family:Arial,Helvetica,sans-serif;padding:22px}
+.wrap{max-width:850px;margin:auto}
+h1{font-size:32px;margin-bottom:6px}
+p{color:#9eb3c9}
+.card{background:rgba(255,255,255,.08);padding:18px;border-radius:18px;margin:14px 0}
+label{display:block;color:#9eb3c9;text-transform:uppercase;letter-spacing:.08em;font-size:12px;margin:12px 0 6px}
+input,textarea,button{width:100%;font-size:18px;border-radius:12px;border:0;padding:12px}
+input,textarea{background:#fff;color:#111}
+textarea{min-height:220px;font-family:monospace}
+button{background:#00a3e0;color:white;font-weight:bold;margin-top:14px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+iframe{display:none}
+.status{color:#9eb3c9;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Flight Display Admin</h1>
+<p>Lisää lennot joko yksitellen tai liitä koko ICS-rosteri.</p>
+
+<div class="card">
+<h2>Lisää yksittäinen lento</h2>
+<form method="post" target="hiddenFrame" action="https://script.google.com/macros/s/AKfycbw6IsyzgvOZtdpqCO5aDQUnH6UlSm2Q8LJTNqz-k4M90-YQGP_YdB7LdK6Wt0RmQZ6x_A/exec" onsubmit="saved()">
+<input type="hidden" name="action" value="addFlight">
+<label>Lennonnumero</label><input name="flightNumber" placeholder="AY1361" required>
+<div class="row"><div><label>Lähtö</label><input name="from" placeholder="HEL" required></div><div><label>Kohde</label><input name="to" placeholder="MAN" required></div></div>
+<label>Lähtöaika</label><input name="departure" type="datetime-local" required>
+<label>Saapumisaika</label><input name="arrival" type="datetime-local" required>
+<button type="submit">Tallenna lento</button>
+</form>
+</div>
+
+<div class="card">
+<h2>Tuo ICS</h2>
+<form method="post" target="hiddenFrame" action="https://script.google.com/macros/s/AKfycbw6IsyzgvOZtdpqCO5aDQUnH6UlSm2Q8LJTNqz-k4M90-YQGP_YdB7LdK6Wt0RmQZ6x_A/exec" onsubmit="saved()">
+<input type="hidden" name="action" value="importIcs">
+<label>ICS-teksti</label>
+<textarea name="ics" placeholder="Liitä koko ICS tähän"></textarea>
+<button type="submit">Tuo ICS</button>
+</form>
+</div>
+
+<div class="card">
+<form method="post" target="hiddenFrame" action="https://script.google.com/macros/s/AKfycbw6IsyzgvOZtdpqCO5aDQUnH6UlSm2Q8LJTNqz-k4M90-YQGP_YdB7LdK6Wt0RmQZ6x_A/exec" onsubmit="saved()">
+<input type="hidden" name="action" value="clearFlights">
+<button type="submit">Tyhjennä kaikki lennot</button>
+</form>
+</div>
+
+<div class="status" id="status">Valmis.</div>
+<iframe name="hiddenFrame"></iframe>
+</div>
+<script>
+function saved(){
+  document.getElementById("status").innerText="Tallennettu. Päivitä näyttö muutaman sekunnin kuluttua.";
+}
+</script>
+</body>
+</html>
