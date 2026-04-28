@@ -178,7 +178,7 @@ header {
 <body>
 <div class="screen">
   <header>
-    <div>Flight Display v1.2-smart-fetch</div>
+    <div>Flight Display v1.3-ics-airlabs</div>
     <div id="clock">--:--</div>
   </header>
 
@@ -206,23 +206,70 @@ header {
 <script>
 const PROXY = "https://script.google.com/macros/s/AKfycbw6IsyzgvOZtdpqCO5aDQUnH6UlSm2Q8LJTNqz-k4M90-YQGP_YdB7LdK6Wt0RmQZ6x_A/exec";
 
-// Testilento. Muuta nämä seuraavaa testiä varten.
-const FLIGHT = {
-  flightNumber: "AY957",
-  flightIata: "AY957",
-  callsign: "FIN957",
-  from: "HEL",
-  to: "ARN",
-  // Ajat ovat käsin syötettyjä testiaikoja. Live-data ei vielä korjaa ETA:a.
-  departure: "2026-04-28T12:20:00+03:00",
-  arrival: "2026-04-28T12:20:00+02:00",
-  departureTimeZone: "Europe/Helsinki",
-  arrivalTimeZone: "Europe/Stockholm"
+const AIRPORTS = {
+  HEL:{tz:"Europe/Helsinki", offset:"+03:00"},
+  MAN:{tz:"Europe/London", offset:"+01:00"},
+  NAP:{tz:"Europe/Rome", offset:"+02:00"},
+  AMS:{tz:"Europe/Amsterdam", offset:"+02:00"},
+  BKK:{tz:"Asia/Bangkok", offset:"+07:00"},
+  ARN:{tz:"Europe/Stockholm", offset:"+02:00"}
 };
 
+const ICS_DATA = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Finnair/MyFlight//NONSGML v1.0//EN
+X-WR-CALNAME:MyFlight Roster
+X-WR-CALDESC:Period 05-2026
+BEGIN:VEVENT
+UID:F+AY+1361++08MAY2026+HEL
+DTSTAMP:20260508T042500Z
+DTSTART:20260508T042500Z
+DTEND:20260508T121500Z
+SUMMARY:HEL MAN HEL
+DESCRIPTION:AY1361 HEL 08:20 MAN 09:20 CC PU 320\\n
+\tAY1362 MAN 10:05 HEL 14:50 CC PU 320
+END:VEVENT
+BEGIN:VEVENT
+UID:F+AY+1791++14MAY2026+HEL
+DTSTAMP:20260514T032500Z
+DTSTART:20260514T032500Z
+DTEND:20260514T122500Z
+SUMMARY:HEL NAP HEL
+DESCRIPTION:AY1791 HEL 07:20 NAP 09:50 CC PU 321\\n
+\tAY1792 NAP 10:35 HEL 15:00 CC PU 321
+END:VEVENT
+BEGIN:VEVENT
+UID:F+AY+1305++15MAY2026+HEL
+DTSTAMP:20260515T123500Z
+DTSTART:20260515T123500Z
+DTEND:20260515T201000Z
+SUMMARY:HEL AMS HEL
+DESCRIPTION:AY1305 HEL 16:40 AMS 18:15 CC PU 35S\\n
+\tAY1306 AMS 19:25 HEL 22:45 CC PU 35S
+END:VEVENT
+BEGIN:VEVENT
+UID:F+AY+141++25MAY2026+HEL
+DTSTAMP:20260525T100000Z
+DTSTART:20260525T100000Z
+DTEND:20260525T225500Z
+SUMMARY:HEL BKK
+DESCRIPTION:AY141  HEL 14:05 BKK 05:30 PU 35L
+END:VEVENT
+BEGIN:VEVENT
+UID:F+AY+142++27MAY2026+BKK
+DTSTAMP:20260526T230500Z
+DTSTART:20260526T230500Z
+DTEND:20260527T125000Z
+SUMMARY:BKK HEL
+DESCRIPTION:AY142  BKK 07:05 HEL 15:25 PU 35L
+END:VEVENT
+END:VCALENDAR`;
+
+let flights = parseIcsFlights(ICS_DATA);
 let liveData = null;
-let liveStatus = "Haetaan live-dataa";
+let liveStatus = "Odottaa lentoikkunaa";
 let lastFetch = 0;
+let lastCallsign = "";
 const LIVE_FETCH_INTERVAL_MS = 60000;
 
 function pad(n) {
@@ -267,38 +314,99 @@ function formatCoordinate(value, type) {
 
 function estimateLocalTimeFromLongitude(longitude) {
   if (longitude === null || longitude === undefined || Number.isNaN(longitude)) return "--";
-
-  // Arvio: aikavyöhyke noin 15 pituusastetta / tunti.
-  // Tämä ei huomioi valtioiden virallisia aikavyöhykerajoja tai kesäaikaa,
-  // mutta antaa lennolla hyvän "missä ajassa mennään" -arvion.
   const offsetHours = Math.round(longitude / 15);
-  const nowUtc = new Date();
-  const estimated = new Date(nowUtc.getTime() + offsetHours * 60 * 60 * 1000);
-  const hh = pad(estimated.getUTCHours());
-  const mm = pad(estimated.getUTCMinutes());
+  const estimated = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
   const sign = offsetHours >= 0 ? "+" : "-";
-  return `${hh}:${mm} UTC${sign}${Math.abs(offsetHours)}`;
+  return `${pad(estimated.getUTCHours())}:${pad(estimated.getUTCMinutes())} UTC${sign}${Math.abs(offsetHours)}`;
 }
 
-function updateClock() {
-  document.getElementById("clock").innerText = formatTime(new Date(), "Europe/Helsinki");
+function parseDateFromUid(eventText) {
+  const m = eventText.match(/UID:F\+AY\+\d+\+\+(\d{2})([A-Z]{3})(\d{4})/);
+  if (!m) return null;
+  const months = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+  return `${m[3]}-${pad(months[m[2]])}-${m[1]}`;
 }
 
-function updateStaticFlightInfo() {
-  const dep = new Date(FLIGHT.departure);
-  const arr = getBestArrivalDate();
+function isoLocal(dateStr, timeStr, airport) {
+  const info = AIRPORTS[airport] || {offset:"+00:00"};
+  return `${dateStr}T${timeStr}:00${info.offset}`;
+}
 
-  document.getElementById("flightNumber").innerText = FLIGHT.flightNumber;
-  document.getElementById("from").innerText = FLIGHT.from;
-  document.getElementById("to").innerText = FLIGHT.to;
-  document.getElementById("depTime").innerText = formatTime(dep, FLIGHT.departureTimeZone);
-  document.getElementById("arrTime").innerText = formatTime(arr, FLIGHT.arrivalTimeZone);
-  document.getElementById("arrTimeHel").innerText = `HEL ${formatTime(arr, "Europe/Helsinki")}`;
+function addDays(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0,10);
+}
+
+function ayToFin(ay) {
+  return "FIN" + ay.replace("AY","");
+}
+
+function parseIcsFlights(ics) {
+  const events = ics.split("BEGIN:VEVENT").slice(1);
+  const result = [];
+
+  for (const ev of events) {
+    const baseDate = parseDateFromUid(ev);
+    if (!baseDate) continue;
+
+    const descMatch = ev.match(/DESCRIPTION:([\s\S]*?)END:VEVENT/);
+    const desc = descMatch ? descMatch[1] : "";
+    const flat = desc
+      .replaceAll("\\n", "\n")
+      .replaceAll("\t", " ")
+      .replaceAll("\r", "");
+
+    const re = /AY(\d{2,4})\s+([A-Z]{3})\s+(\d{2}:\d{2})\s+([A-Z]{3})\s+(\d{2}:\d{2})/g;
+    let match;
+    let previousArrivalLocalDate = null;
+
+    while ((match = re.exec(flat)) !== null) {
+      const flightNumber = "AY" + match[1];
+      const from = match[2];
+      const depTime = match[3];
+      const to = match[4];
+      const arrTime = match[5];
+
+      let depDate = previousArrivalLocalDate || baseDate;
+      let arrDate = depDate;
+
+      const dep = new Date(isoLocal(depDate, depTime, from));
+      let arr = new Date(isoLocal(arrDate, arrTime, to));
+
+      if (arr <= dep) {
+        arrDate = addDays(arrDate, 1);
+        arr = new Date(isoLocal(arrDate, arrTime, to));
+      }
+
+      result.push({
+        flightNumber,
+        flightIata: flightNumber,
+        callsign: ayToFin(flightNumber),
+        from,
+        to,
+        departure: dep.toISOString(),
+        arrival: arr.toISOString(),
+        departureTimeZone: (AIRPORTS[from] || {}).tz || "UTC",
+        arrivalTimeZone: (AIRPORTS[to] || {}).tz || "UTC",
+        arrivalLocalDate: arrDate
+      });
+
+      previousArrivalLocalDate = arrDate;
+    }
   }
 
-function getBestArrivalDate() {
+  return result.sort((a,b) => new Date(a.departure) - new Date(b.departure));
+}
+
+function currentFlight() {
+  const now = new Date();
+  return flights.find(f => new Date(f.arrival) > now) || null;
+}
+
+function getBestArrivalDate(f) {
   if (liveData && liveData.arrivalBest) return new Date(liveData.arrivalBest);
-  return new Date(FLIGHT.arrival);
+  return new Date(f.arrival);
 }
 
 function getBestStatus() {
@@ -306,10 +414,80 @@ function getBestStatus() {
   return null;
 }
 
-function updateFlightTime() {
+function shouldFetchLiveData(f) {
   const now = new Date();
-  const dep = new Date(FLIGHT.departure);
-  const arr = new Date(FLIGHT.arrival);
+  const dep = new Date(f.departure);
+  const arr = getBestArrivalDate(f);
+  const startFetch = new Date(dep.getTime() - 60 * 60 * 1000);
+  const stopFetch = new Date(arr.getTime() + 15 * 60 * 1000);
+  return now >= startFetch && now <= stopFetch;
+}
+
+async function fetchLiveData(f) {
+  if (!f) return;
+
+  if (lastCallsign !== f.callsign) {
+    liveData = null;
+    liveStatus = "Haetaan live-dataa";
+    lastFetch = 0;
+    lastCallsign = f.callsign;
+  }
+
+  if (!shouldFetchLiveData(f)) {
+    liveData = null;
+    liveStatus = "Odottaa lentoikkunaa";
+    document.getElementById("debug").innerText = "API-haku alkaa 60 min ennen lähtöä";
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastFetch < LIVE_FETCH_INTERVAL_MS) return;
+  lastFetch = now;
+
+  try {
+    const url = `${PROXY}?callsign=${encodeURIComponent(f.callsign)}&flight_iata=${encodeURIComponent(f.flightIata)}`;
+    const response = await fetch(url, { cache:"no-store" });
+    if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
+
+    const data = await response.json();
+    document.getElementById("debug").innerText = data.debug || "Proxy vastasi";
+
+    if (!data.found) {
+      liveData = null;
+      liveStatus = "Ei live-osumaa";
+      return;
+    }
+
+    liveData = data;
+    liveStatus = "Live";
+  } catch (error) {
+    liveData = null;
+    liveStatus = "Live-data ei saatavilla";
+    document.getElementById("debug").innerText = `Virhe: ${error.message}`;
+  }
+}
+
+function render() {
+  const now = new Date();
+  const f = currentFlight();
+
+  document.getElementById("clock").innerText = formatTime(now, "Europe/Helsinki");
+
+  if (!f) {
+    document.getElementById("flightNumber").innerText = "--";
+    document.getElementById("from").innerText = "Ei";
+    document.getElementById("to").innerText = "lentoja";
+    document.getElementById("status").innerText = "IDLE";
+    document.getElementById("timeLabel").innerText = "";
+    document.getElementById("timeLeft").innerText = "--";
+    document.getElementById("debug").innerText = "Ei tulevia lentoja ICS:ssä";
+    return;
+  }
+
+  fetchLiveData(f);
+
+  const dep = new Date(f.departure);
+  const arr = getBestArrivalDate(f);
   const total = arr - dep;
   const elapsed = now - dep;
 
@@ -330,93 +508,41 @@ function updateFlightTime() {
     progress = 100;
   }
 
+  document.getElementById("flightNumber").innerText = f.flightNumber;
+  document.getElementById("from").innerText = f.from;
+  document.getElementById("to").innerText = f.to;
   document.getElementById("status").innerText = status;
   document.getElementById("timeLabel").innerText = label;
   document.getElementById("timeLeft").innerText = timeText;
   document.getElementById("progress").style.width = `${progress}%`;
-}
 
-function updateLiveFields() {
-  const altitudeFt = liveData ? metersToFeet(liveData.altitudeMeters) : null;
-  const speedKmh = liveData ? msToKmh(liveData.velocityMs) : null;
-  const heading = liveData && liveData.heading !== null ? Math.round(liveData.heading) : null;
+  document.getElementById("depTime").innerText = formatTime(dep, f.departureTimeZone);
+  document.getElementById("arrTime").innerText = formatTime(arr, f.arrivalTimeZone);
+  document.getElementById("arrTimeHel").innerText = `HEL ${formatTime(arr, "Europe/Helsinki")}`;
+
+  const useLive = liveData && now >= dep && now < arr;
+  const altitudeFt = useLive ? metersToFeet(liveData.altitudeMeters) : null;
+  const speedKmh = useLive ? msToKmh(liveData.velocityMs) : null;
+  const heading = useLive && liveData.heading !== null ? Math.round(liveData.heading) : null;
 
   document.getElementById("alt").innerText = formatValue(altitudeFt, " ft");
   document.getElementById("spd").innerText = formatValue(speedKmh, " km/h");
   document.getElementById("hdg").innerText = formatValue(heading, "°");
 
-  if (liveData && liveData.latitude !== null && liveData.longitude !== null) {
+  if (useLive && liveData.latitude !== null && liveData.longitude !== null) {
     document.getElementById("pos").innerText = `${formatCoordinate(liveData.latitude,"lat")} ${formatCoordinate(liveData.longitude,"lon")}`;
     document.getElementById("localTime").innerText = estimateLocalTimeFromLongitude(liveData.longitude);
   } else {
-    document.getElementById("pos").innerText = FLIGHT.callsign;
+    document.getElementById("pos").innerText = f.callsign;
     document.getElementById("localTime").innerText = "--";
   }
 
-  if (liveData && liveData.lastContact) {
+  if (useLive && liveData.lastContact) {
     const ageSeconds = Math.max(0, Math.round((new Date() - new Date(liveData.lastContact)) / 1000));
     document.getElementById("liveAge").innerText = `${liveStatus} · ${ageSeconds}s sitten`;
   } else {
     document.getElementById("liveAge").innerText = liveStatus;
   }
-}
-
-function shouldFetchLiveData() {
-  const now = new Date();
-  const dep = new Date(FLIGHT.departure);
-  const arr = getBestArrivalDate();
-  const startFetch = new Date(dep.getTime() - 60 * 60 * 1000);
-
-  // Haetaan live/ETA-dataa vain 60 min ennen lähtöä, lennon aikana ja vähän saapumisen jälkeen.
-  const stopFetch = new Date(arr.getTime() + 15 * 60 * 1000);
-  return now >= startFetch && now <= stopFetch;
-}
-
-async function fetchLiveData() {
-  if (!shouldFetchLiveData()) {
-    liveData = null;
-    liveStatus = "Odottaa lentoikkunaa";
-    document.getElementById("debug").innerText = "API-haku alkaa 60 min ennen lähtöä";
-    updateLiveFields();
-    return;
-  }
-
-  const now = Date.now();
-  if (now - lastFetch < LIVE_FETCH_INTERVAL_MS) return;
-  lastFetch = now;
-
-  try {
-    const url = `${PROXY}?callsign=${encodeURIComponent(FLIGHT.callsign)}&flight_iata=${encodeURIComponent(FLIGHT.flightIata)}`;
-    const response = await fetch(url, { cache:"no-store" });
-    if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
-
-    const data = await response.json();
-    document.getElementById("debug").innerText = data.debug || "Proxy vastasi";
-
-    if (!data.found) {
-      liveData = null;
-      liveStatus = "Ei live-osumaa";
-      updateLiveFields();
-      return;
-    }
-
-    liveData = data;
-    liveStatus = "Live";
-    updateLiveFields();
-  } catch (error) {
-    liveData = null;
-    liveStatus = "Live-data ei saatavilla";
-    document.getElementById("debug").innerText = `Virhe: ${error.message}`;
-    updateLiveFields();
-  }
-}
-
-function render() {
-  updateClock();
-  updateStaticFlightInfo();
-  updateFlightTime();
-  updateLiveFields();
-  fetchLiveData();
 }
 
 render();
